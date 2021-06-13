@@ -13,6 +13,7 @@ using Firebase.Storage;
 using Firebase.Auth;
 using HkClothes.model;
 using Newtonsoft.Json;
+using System.Reflection;
 
 namespace HkClothes
 {
@@ -21,6 +22,7 @@ namespace HkClothes
         public Form1()
         {
             InitializeComponent();
+            typeof(DataGridView).InvokeMember("DoubleBuffered", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.SetProperty, null, data_products, new object[] { true });
         }
 
         FirestoreDb database;
@@ -81,7 +83,6 @@ namespace HkClothes
         private void add_product_Click(object sender, EventArgs e)
         {
             if (!checkValid()) { MessageBox.Show("Nhập đầy đủ thông tin"); return; }
-            foreach (var i in product_size.CheckedItems) { }
             using (LoadingForm loadingForm = new LoadingForm(uploadData))
             {
                 loadingForm.ShowDialog();
@@ -204,7 +205,7 @@ namespace HkClothes
             var k = database.Collection("shopstore").Document("products").Collection("product_detail");
             FirestoreChangeListener listener = k.Listen((snapshot) =>
             {
-                data_products.Rows.Clear();
+                this.Invoke(new Action(() => { data_products.Rows.Clear(); }));
                 foreach (DocumentSnapshot documentSnapshot in snapshot.Documents)
                 {
                     if (documentSnapshot.Exists)
@@ -219,8 +220,31 @@ namespace HkClothes
                             data_products.Rows[i].Cells["stt"].Value = i + 1;
                             data_products.Rows[i].Cells["image"].Value = image;
                             data_products.Rows[i].Cells["name"].Value = n.product_name;
-                            data_products.Rows[i].Cells["type"].Value = n.type;
+                            string type = null;
+                            switch (n.type)
+                            {
+                                case "1":
+                                    type = "Shirt";
+                                    break;
+                                case "2":
+                                    type = "T-Shirt";
+                                    break;
+                                case "3":
+                                    type = "Hoodies";
+                                    break;
+                                case "4":
+                                    type = "Short";
+                                    break;
+                                case "5":
+                                    type = "Pants";
+                                    break;
+                                case "6":
+                                    type = "Sweatshirt";
+                                    break;
+                            }
+                            data_products.Rows[i].Cells["type"].Value = type;
                             data_products.Rows[i].Cells["price"].Value = n.price.ToString();
+                            data_products.Rows[i].Tag = n;
                         }));
 
                     }
@@ -237,6 +261,62 @@ namespace HkClothes
             Bitmap bitmap2 = new Bitmap(responseStream);
             return bitmap2;
         }
+        private void deleteToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (MessageBox.Show("Chắc ko ??", "Alert", MessageBoxButtons.YesNo) == DialogResult.Yes)
+            {
+                using (LoadingForm loadingForm = new LoadingForm(deleteProduct))
+                {
+                    loadingForm.ShowDialog();
+                }
+            }
+        }
+
+        private void deleteProduct()
+        {
+            var k = (Product)this.Invoke(new Func<Product>(() => (Product)data_products.SelectedRows[0].Tag));
+            deleteProductAsync(k).Wait();
+        }
+
+        private async Task deleteProductAsync(Product k)
+        {
+            await database.Collection("shopstore").Document("products").Collection("product_detail").Document(k.pid).DeleteAsync();
+            var task = new FirebaseStorage("hkclothes-d2a8d.appspot.com").Child("shopstore").Child("product").Child(k.pid + ".jpg").DeleteAsync();
+            task.Wait();
+            database.Collection("shopstore").Document("products").Collection("product_size").WhereEqualTo("pid", k.pid).Listen(async (snapshot) =>
+            {
+                foreach (DocumentSnapshot documentSnapshot in snapshot.Documents)
+                {
+                    if (documentSnapshot.Exists)
+                    {
+                        await database.Collection("shopstore").Document("products").Collection("product_size").Document(documentSnapshot.GetValue<string>("psid")).DeleteAsync();
+                    }
+                }
+
+            });
+
+            database.Collection("shopstore").Document("products").Collection("product_sale").WhereEqualTo("pid", k.pid).Listen(async (snapshot) =>
+            {
+                foreach (DocumentSnapshot documentSnapshot in snapshot.Documents)
+                {
+                    if (documentSnapshot.Exists)
+                    {
+                        await database.Collection("shopstore").Document("products").Collection("product_size").Document(documentSnapshot.GetValue<string>("psid")).DeleteAsync();
+                    }
+                }
+
+            });
+
+        }
+
+        private void data_products_CellMouseDown(object sender, DataGridViewCellMouseEventArgs e)
+        {
+            data_products.ClearSelection();
+            if (e.RowIndex >= 0)
+                data_products.Rows[e.RowIndex].Selected = true;
+        }
         #endregion
+
+
     }
 }
