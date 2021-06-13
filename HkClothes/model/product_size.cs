@@ -10,6 +10,6 @@ namespace HkClothes.model
     {
         public string psid { get; set; }
         public string pid { get; set; }
-        public int sid { get; set; }
+        public string sid { get; set; }
     }
 }

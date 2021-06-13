@@ -10,7 +10,7 @@ namespace HkClothes.model
     {
         public string pid { get; set; }
         public string product_name { get; set; }
-        public int type { get; set; }
+        public string type { get; set; }
         public double price { get; set; }
         public string image_url { get; set; }
     }
