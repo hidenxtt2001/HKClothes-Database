@@ -25,9 +25,8 @@ namespace HkClothes
             typeof(DataGridView).InvokeMember("DoubleBuffered", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.SetProperty, null, data_products, new object[] { true });
         }
 
-        FirestoreDb database;
+        static public FirestoreDb database;
         string imageProduct;
-        static List<string> sizeCheck;
         private void Form1_Load(object sender, EventArgs e)
         {
             string path = AppDomain.CurrentDomain.BaseDirectory + @"hkclothes-d2a8d-firebase-adminsdk-8zdze-71fc1a3cb9.json";
@@ -203,7 +202,7 @@ namespace HkClothes
         private void loadProducts()
         {
             var k = database.Collection("shopstore").Document("products").Collection("product_detail");
-            FirestoreChangeListener listener = k.Listen((snapshot) =>
+            FirestoreChangeListener listener = k.Listen(async (snapshot) =>
             {
                 this.Invoke(new Action(() => { data_products.Rows.Clear(); }));
                 foreach (DocumentSnapshot documentSnapshot in snapshot.Documents)
@@ -213,10 +212,23 @@ namespace HkClothes
                         var json = JsonConvert.SerializeObject(documentSnapshot.ToDictionary(), Newtonsoft.Json.Formatting.Indented);
 
                         var n = JsonConvert.DeserializeObject<Product>(json);
+                        var temp_sale = await database.Collection("shopstore").Document("products").Collection("product_sale").WhereEqualTo("pid", n.pid).GetSnapshotAsync();
+
+
+                        bool isSale = false;
+
+                        if (temp_sale.Documents.Count > 0)
+                        {
+                            json = JsonConvert.SerializeObject(JsonConvert.DeserializeObject<ProductSale>(JsonConvert.SerializeObject(temp_sale.Documents[0].ToDictionary(), Newtonsoft.Json.Formatting.Indented)), Newtonsoft.Json.Formatting.Indented);
+                            var sale = JsonConvert.DeserializeObject<ProductSale>(json);
+                            isSale = true;
+                        }
+
                         var image = imageUrlProduct(n.image_url);
                         this.Invoke(new Action(() =>
                         {
                             int i = data_products.Rows.Add();
+                            if (isSale) data_products.Rows[i].DefaultCellStyle.BackColor = Color.GreenYellow;
                             data_products.Rows[i].Cells["stt"].Value = i + 1;
                             data_products.Rows[i].Cells["image"].Value = image;
                             data_products.Rows[i].Cells["name"].Value = n.product_name;
@@ -251,6 +263,7 @@ namespace HkClothes
                 }
 
             });
+
         }
 
         private Bitmap imageUrlProduct(string url)
@@ -263,13 +276,14 @@ namespace HkClothes
         }
         private void deleteToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (MessageBox.Show("Chắc ko ??", "Alert", MessageBoxButtons.YesNo) == DialogResult.Yes)
-            {
-                using (LoadingForm loadingForm = new LoadingForm(deleteProduct))
+            if (data_products.SelectedRows.Count > 0)
+                if (MessageBox.Show("Chắc ko ??", "Alert", MessageBoxButtons.YesNo) == DialogResult.Yes)
                 {
-                    loadingForm.ShowDialog();
+                    using (LoadingForm loadingForm = new LoadingForm(deleteProduct))
+                    {
+                        loadingForm.ShowDialog();
+                    }
                 }
-            }
         }
 
         private void deleteProduct()
@@ -314,6 +328,15 @@ namespace HkClothes
             data_products.ClearSelection();
             if (e.RowIndex >= 0)
                 data_products.Rows[e.RowIndex].Selected = true;
+        }
+
+        private void saleToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (data_products.SelectedRows.Count > 0)
+                using (UpdateSale form = new UpdateSale((Product)data_products.Rows[data_products.SelectedRows[0].Index].Tag))
+                {
+                    form.ShowDialog();
+                }
         }
         #endregion
 
